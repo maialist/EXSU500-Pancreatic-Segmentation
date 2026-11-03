@@ -1,0 +1,13 @@
+# Raw and processed data (never commit)
+EXSU500_PancreasSeg_raw_data/
+EXSU500_PancreaticSeg_raw_data/
+data/
+*.nii
+*.nii.gz
+*.npz
+*.npy
+
+__pycache__/
+.ipynb_checkpoints/
+.venv/
+.DS_Store
