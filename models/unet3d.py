@@ -504,7 +504,7 @@ def build_parser() -> argparse.ArgumentParser:
     predict_parser.add_argument("--data", type=Path, default=DEFAULT_DATA_DIR)
     predict_parser.add_argument("--splits", type=Path, default=DEFAULT_DATA_DIR / "splits.json")
     predict_parser.add_argument("--model", type=Path, default=DEFAULT_MODEL_PATH)
-    predict_parser.add_argument("--split", choices=("val", "test"), required=True)
+    predict_parser.add_argument("--split", choices=("train", "val", "test"), required=True)
     predict_parser.add_argument(
         "--out", type=Path, default=Path("data/predictions/unet3d")
     )
