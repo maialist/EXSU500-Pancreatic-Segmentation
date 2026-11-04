@@ -40,6 +40,20 @@ All scans are sourced from the Memorial Sloan Kettering Cancer Center (New York 
 
 ---
 
+## Python environment
+
+The project dependencies are pinned in `requirements.txt` and were exported from Python 3.11.7. To recreate the environment from the repository root:
+
+```bash
+python3.11 -m venv .pancsegenv
+source .pancsegenv/bin/activate
+python -m pip install -r requirements.txt
+```
+
+The virtual environment itself is excluded by `.gitignore`; share the requirements file rather than committing the machine-specific environment directory.
+
+---
+
 ## Support vector machine baseline
 
 The voxel-wise SVM uses the shared patient-level `train`/`val`/`test` split and the preprocessed arrays. It learns from a 3x3x3 neighbourhood of normalized CT intensities and predicts each volume in batches. The default is a linear SVM: it is considerably more practical for millions of voxels than a kernel SVM while still providing a classical SVM baseline.
@@ -66,3 +80,31 @@ The following are fixed for a fair comparison with the other project models: sou
 The implementation fixes the linear kernel, 3x3x3 edge-padded intensity features, balanced class weights, squared-hinge loss, and a 5,000-iteration limit. Each training run can change `--target`, `--c`, `--samples-per-class`, `--samples-per-class-per-case`, and `--seed`. `--data`, `--splits`, and `--model` choose the input and output paths; prediction additionally requires `--split` (`val` or `test`) and allows `--batch-size` and `--out` to be changed. All training choices are stored in the model artifact.
 
 Recommended starting point for this project: keep the shared preprocessing and patient split unchanged; use the default three-class target to match the project goal; start with `C=1`, at most 250 samples per class per training patient and 10,000 per class overall, seed 42. If the project question is specifically tumour detection, choose `--target tumour` and report tumour Dice. If tuning `C` or sampling limits, compare candidates on validation data only and record the selected settings before running the test set. These are reproducible baseline recommendations, not universal or clinically validated SVM standards. The dataset labels are reference annotations for this research benchmark, not an independent clinical gold standard. This project remains research-only and is not for clinical decision-making.
+
+## Random forest
+
+The voxel-wise random forest uses the same preprocessed volumes and shared patient-level split as the SVM. It extracts the same edge-padded 3x3x3 normalized CT intensity neighbourhood (27 features) and samples a balanced number of voxels from the training patients. It supports both three-class pancreas/tumour segmentation and tumour-versus-rest prediction.
+
+Install scikit-learn and joblib in the same environment as the preprocessing dependencies, then run:
+
+```bash
+python random_forest.py train
+python random_forest.py predict --split val
+```
+
+Training saves `data/models/random_forest.joblib`; predictions and mean per-case Dice are written for labelled validation or test cases, using the same Dice convention as the SVM. The default model is three-class. Use validation predictions to select settings, then evaluate the test split once after choices are fixed:
+
+```bash
+python random_forest.py predict --split test
+```
+
+The project baseline sets `n_estimators=200` (number of trees), `max_depth=20` (limits tree complexity), `min_samples_leaf=2` (discourages leaves based on a single voxel), and `max_features="sqrt"` (each split considers the square root of the 27 input features). It uses `class_weight="balanced_subsample"` to account for class imbalance within each bootstrap sample, `n_jobs=-1` to train trees in parallel, and seed 42 for reproducibility. Training samples at most 250 voxels per class per patient and 10,000 per class overall, making the three classes equally represented in the fit data. These are starting settings for this dataset and runtime, not clinically validated or guaranteed optimal settings.
+
+You can change the target, tree count, depth, minimum leaf size, feature subset, sample caps, and seed with `--target`, `--n-estimators`, `--max-depth`, `--min-samples-leaf`, `--max-features`, `--samples-per-class`, `--samples-per-class-per-case`, and `--seed`. `--max-features` accepts `sqrt`, `log2`, or `all` (all 27 features). For example:
+
+```bash
+python random_forest.py train --n-estimators 300 --max-depth 24 --min-samples-leaf 3
+python random_forest.py train --target tumour
+```
+
+The exact model and sampling settings are stored in the model artifact. Keep preprocessing and the split unchanged for comparison; tune on validation data only and record selected settings before the single test evaluation.

@@ -26,6 +26,7 @@ Medical Segmentation Decathlon Task07 Pancreas (portal-venous CT, Memorial Sloan
   3. Clip CT values to -100..240 HU (soft tissue) and scale to [0, 1].
   4. Save each case as `data/processed/<case>.npz` (`image` float16, `label` uint8).
   5. Write `data/processed/splits.json`, a seeded (42) 70/15/15 train/val/test split by patient, drawn from `imagesTr` because `imagesTs` has no labels.
+  6. `svm.py` implements an SVM model and `random_forest.py` implements a random forest model
 - [.gitignore](.gitignore) excludes raw data, `data/`, and `.nii`, `.nii.gz`, `.npz`, `.npy` files.
 
 Run it with `python preprocess.py` (use `--raw` to override the data path, `--limit N` for a quick test). Dependencies: `nibabel`, `numpy`, `scipy`. `load_case(path)` returns `(image float32, label uint8)` for one case.
@@ -37,9 +38,7 @@ Run it with `python preprocess.py` (use `--raw` to override the data path, `--li
 - Do not change preprocessing parameters (spacing, HU window) without reprocessing and re-running all models.
 - Interpolate labels with nearest-neighbour only.
 
-## Next steps (not yet implemented)
+## Next steps
 
-- SVM
-- Random forest
 - 3D U-Net: train on random 3D patches with a Dice-based loss.
 - A shared evaluation script (Dice, per class) run on the test split for all three models.
