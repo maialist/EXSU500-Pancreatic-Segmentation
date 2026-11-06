@@ -16,6 +16,7 @@ CLASS_IDS = (0, 1, 2)
 CLASS_NAMES = {0: "background", 1: "pancreas", 2: "tumour"}
 DEFAULT_DATA_DIR = Path("data/processed")
 DEFAULT_MODEL_PATH = Path("data/models/unet3d.pt")
+DEFAULT_CHECKPOINT_PATH = Path("data/models/unet3d_training.pt") # default for checkpoint path
 DEFAULT_PATCH_SIZE = (64, 64, 32)
 NUM_DOWNSAMPLINGS = 3
 
@@ -627,9 +628,9 @@ def build_parser() -> argparse.ArgumentParser:
     train_parser.add_argument("--inference-batch-size", type=int, default=1)
     # checkpoint and resume arguments for training
     train_parser.add_argument(
-    "--checkpoint",
+    "--checkpoint", 
     type=Path,
-    default=Path("data/models/unet3d_training.pt"),
+    default=DEFAULT_CHECKPOINT_PATH,
     help="Path to the training-state checkpoint",
 )
     train_parser.add_argument(
