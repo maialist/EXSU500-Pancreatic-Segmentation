@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+from html import parser
 import json
 from pathlib import Path
 from typing import Any
@@ -18,6 +19,41 @@ DEFAULT_MODEL_PATH = Path("data/models/unet3d.pt")
 DEFAULT_PATCH_SIZE = (64, 64, 32)
 NUM_DOWNSAMPLINGS = 3
 
+## new - save checkpoints every epoch
+def save_training_checkpoint(
+    path: Path,
+    model: torch.nn.Module,
+    optimizer: torch.optim.Optimizer,
+    epoch: int,
+    best_dice: float,
+    rng: np.random.Generator,
+) -> None:
+    """Save the complete state needed to resume training."""
+
+    checkpoint = {
+        "epoch": epoch,
+        "best_dice": best_dice,
+        "model_state_dict": model.state_dict(),
+        "optimizer_state_dict": optimizer.state_dict(),
+
+        # Random number generator states
+        "numpy_rng_state": rng.bit_generator.state,
+        "torch_rng_state": torch.get_rng_state(),
+        "cuda_rng_state": (
+            torch.cuda.get_rng_state_all()
+            if torch.cuda.is_available()
+            else None
+        ),
+    }
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    temp_path = path.with_suffix(path.suffix + ".tmp")
+    torch.save(checkpoint, temp_path)
+    temp_path.replace(path)
+
+    print(f"Saved training checkpoint at epoch {epoch}", flush=True)
+##
 
 def target_labels(label: np.ndarray, target: str) -> np.ndarray:
     """Return labels for multiclass segmentation or tumour-vs-rest."""
@@ -350,14 +386,49 @@ def train(args: argparse.Namespace) -> None:
 
     target = args.target
     num_classes = 2 if target == "tumour" else 3
+    ## new - save checkpoints every epoch
     model = UNet3D(out_channels=num_classes, base_channels=args.base_channels).to(device)
+
     optimizer = torch.optim.AdamW(
         model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay
     )
+
+    # Initialize training state
     best_dice = -1.0
+    start_epoch = 1
+
     args.model.parent.mkdir(parents=True, exist_ok=True)
 
-    for epoch in range(1, args.epochs + 1):
+    # Resume from previous training checkpoint if requested
+    if args.resume:
+        print(f"Loading training checkpoint: {args.checkpoint}")
+
+        checkpoint = torch.load(
+            args.checkpoint,
+            map_location=device,
+            weights_only=False,
+        )
+
+        model.load_state_dict(checkpoint["model_state_dict"])
+        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+
+        start_epoch = checkpoint["epoch"] + 1
+        best_dice = checkpoint["best_dice"]
+
+        rng.bit_generator.state = checkpoint["numpy_rng_state"]
+        torch.set_rng_state(checkpoint["torch_rng_state"].cpu())
+
+        if (
+            torch.cuda.is_available()
+            and checkpoint["cuda_rng_state"] is not None
+        ):
+            torch.cuda.set_rng_state_all(checkpoint["cuda_rng_state"])
+
+        print(f"Resuming from epoch {start_epoch}")
+
+    # Begin training
+    for epoch in range(start_epoch, args.epochs + 1):
+    ##new ends
         model.train()
         case_names = list(splits["train"])
         rng.shuffle(case_names)
@@ -450,7 +521,16 @@ def train(args: argparse.Namespace) -> None:
                     args.model,
                 )
                 print(f"Saved best checkpoint to {args.model}")
-
+        ##new - save checkpoints every epoch
+        save_training_checkpoint(
+            args.checkpoint,
+            model,
+            optimizer,
+            epoch,
+            best_dice,
+            rng,
+        )
+        ##new ends
 
 def predict(args: argparse.Namespace) -> None:
     splits = _load_splits(args.splits)
@@ -501,7 +581,7 @@ def predict(args: argparse.Namespace) -> None:
         )
         if args.verbose:
             print(f"  Prediction complete: {prediction.shape}", flush=True)
-            
+
         for class_id, score in _score_case(truth, prediction, target).items():
             if score is not None:
                 totals[class_id]["dice_sum"] += score
@@ -545,6 +625,19 @@ def build_parser() -> argparse.ArgumentParser:
     train_parser.add_argument("--validation-every", type=int, default=5)
     train_parser.add_argument("--overlap", type=float, default=0.5)
     train_parser.add_argument("--inference-batch-size", type=int, default=1)
+    # checkpoint and resume arguments for training
+    train_parser.add_argument(
+    "--checkpoint",
+    type=Path,
+    default=Path("data/models/unet3d_training.pt"),
+    help="Path to the training-state checkpoint",
+)
+    train_parser.add_argument(
+    "--resume",
+    action="store_true",
+    help="Resume training from a saved checkpoint",
+)
+    # verbose argument for training
     train_parser.add_argument(
     "--verbose",
     action="store_true",
