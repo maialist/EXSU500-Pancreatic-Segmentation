@@ -292,8 +292,21 @@ def _validate(
 ) -> tuple[float, dict[int, dict[str, float | int]]]:
     class_ids = (1,) if target == "tumour" else (1, 2)
     totals = {class_id: {"dice_sum": 0.0, "case_count": 0} for class_id in class_ids}
-    for case_name in case_names:
+    for case_index, case_name in enumerate(case_names, start=1):
+        if args.verbose:
+            print(
+                f"  Validating case {case_index}/{len(case_names)}: {case_name}",
+                flush=True,
+            )
+
         image, truth = _load_case(args.data, case_name, target)
+
+        if args.verbose:
+            print(
+                f"    Image shape: {image.shape}",
+                flush=True,
+            )
+
         prediction = _predict_volume(
             model,
             image,
@@ -302,6 +315,13 @@ def _validate(
             args.inference_batch_size,
             device,
         )
+
+        if args.verbose:
+            print(
+                f"    Prediction complete: {prediction.shape}",
+                flush=True,
+            )
+        
         for class_id, score in _score_case(truth, prediction, target).items():
             if score is not None:
                 totals[class_id]["dice_sum"] += score
@@ -358,8 +378,22 @@ def train(args: argparse.Namespace) -> None:
             patch_batch.clear()
             label_batch.clear()
 
-        for case_name in case_names:
+        for case_index, case_name in enumerate(case_names, start=1):
+            if args.verbose:
+                print(
+                    f"  Processing training case "
+                    f"{case_index}/{len(case_names)}: {case_name}",
+                    flush=True,
+                )
+
             image, label = _load_case(args.data, case_name, target)
+
+            if args.verbose:
+                print(
+                    f"    Image shape: {image.shape}",
+                    flush=True,
+                )
+
             foreground_coordinates = {
                 int(class_id): np.argwhere(label == class_id)
                 for class_id in np.unique(label)
@@ -443,8 +477,20 @@ def predict(args: argparse.Namespace) -> None:
     class_ids = (1,) if target == "tumour" else (1, 2)
     totals = {class_id: {"dice_sum": 0.0, "case_count": 0} for class_id in class_ids}
 
-    for case_name in splits[args.split]:
+    case_names = splits[args.split]
+
+    for case_index, case_name in enumerate(case_names, start=1):
+        if args.verbose:
+            print(
+                f"Predicting case {case_index}/{len(case_names)}: {case_name}",
+                flush=True,
+            )
+
         image, truth = _load_case(args.data, case_name, target)
+
+        if args.verbose:
+            print(f"  Image shape: {image.shape}", flush=True)
+        
         prediction = _predict_volume(
             model,
             image,
@@ -453,6 +499,9 @@ def predict(args: argparse.Namespace) -> None:
             args.batch_size,
             device,
         )
+        if args.verbose:
+            print(f"  Prediction complete: {prediction.shape}", flush=True)
+            
         for class_id, score in _score_case(truth, prediction, target).items():
             if score is not None:
                 totals[class_id]["dice_sum"] += score
@@ -496,6 +545,11 @@ def build_parser() -> argparse.ArgumentParser:
     train_parser.add_argument("--validation-every", type=int, default=5)
     train_parser.add_argument("--overlap", type=float, default=0.5)
     train_parser.add_argument("--inference-batch-size", type=int, default=1)
+    train_parser.add_argument(
+    "--verbose",
+    action="store_true",
+    help="print detailed training and validation progress",
+    )
     train_parser.set_defaults(func=train)
 
     predict_parser = commands.add_parser(
@@ -511,6 +565,11 @@ def build_parser() -> argparse.ArgumentParser:
     predict_parser.add_argument("--batch-size", type=int, default=1)
     predict_parser.add_argument("--overlap", type=float, default=0.5)
     predict_parser.add_argument("--device", choices=("auto", "cpu", "cuda", "mps"), default="auto")
+    predict_parser.add_argument(
+    "--verbose",
+    action="store_true",
+    help="print detailed prediction progress",
+    )
     predict_parser.set_defaults(func=predict)
     return parser
 
